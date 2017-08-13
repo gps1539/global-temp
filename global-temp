@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+import urllib.request
+import re
+import os
+import sys
+import argparse
+import json
+import time
+
+apikey = "5e5f9982e1db46f05d28e5139cfdf63b"
+
+temps=[]
+stations={}
+errors=0
+
+# command line options and help
+parser = argparse.ArgumentParser()
+parser.add_argument("--influx", nargs='+', help="influx server, port, user and password")
+parser.add_argument("--read", nargs='+', help="Import stations from csv file")
+args = parser.parse_args()
+
+if args.influx:
+	if len(args.influx)!=4:
+		print('The influxdb server, port #, user and password are required with --influx')
+		sys.exit(1)
+
+if args.read:
+	if len(args.read)!=1:
+		print('a csv filename is required with --read')
+		sys.exit(1)
+
+def gettemp(station, location):
+	url = "http://api.openweathermap.org/data/2.5/weather?id="+location+"&appid="+apikey
+	try:
+		f = urllib.request.urlopen(url)
+		r = f.read()
+		r = (r.decode("utf-8").strip())
+		r = r.split('"temp"', 1)[1]
+		r = r.split(',', 1)[0]
+		r = r.split(':', 1)[1]
+		print(str(station) + ' ' + str(r))
+		temps.append(float(r))
+	except urllib.error.URLError as e:
+		errors=+1
+		print('http timeout ' + str(errors) + ' errors')
+		return
+
+if args.read:
+	a=(args.read[0])
+	print(a)
+	with open(a, mode='r') as f:
+		json_data = json.load(f)
+	for json_dict in json_data:
+		s=(json_dict['name'])
+		i=(json_dict['id'])
+		stations.update({s:i})
+
+print(str(len(stations)) + ' stations')
+
+for key in sorted(stations.keys()):
+	value=str(stations[key])
+	gettemp(key, value)
+#	time.sleep(1)
+
+print()
+average_kelvin=(sum(temps)/len(temps))
+average_celsius=((average_kelvin)-273.15)
+average_fahrenheit=(((average_celsius)*1.8)+32)
+print("Kelvin " + str(round(average_kelvin,4)))
+print("Celsius " + str(round(average_celsius,4)))
+print("Fahrenheit " + str(round(average_fahrenheit,4)))
+
+# ToDo
+# print status on single line N of Total
+# show how many fails 
+# estimate time to complete
+# show coldest place and hottest place
