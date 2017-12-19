@@ -5,20 +5,23 @@ import os
 import sys
 import argparse
 import json
+import datetime
 import time
 from multiprocessing.dummy import Pool
 
-apikey = "5e5f9982e1db46f05d28e5139cfdf63b"
-
-#temps=[]
 temps={}
 stations={}
 errors=0
+
+# set directory to user's home (should work for Linux, Mac and Windows)
+owd = os.getcwd()
+os.chdir(os.path.expanduser("~"))
 
 # command line options and help
 parser = argparse.ArgumentParser()
 parser.add_argument("--influx", nargs='+', help="influx server, port, user and password")
 parser.add_argument("--read", nargs='+', help="Import stations from json file")
+parser.add_argument("--key", nargs='+', help="add an api key, see https://openweathermap.org/api")
 args = parser.parse_args()
 
 if args.influx:
@@ -31,9 +34,39 @@ if args.read:
 		print('a filename is required with --read')
 		sys.exit(1)
 
+if args.key:
+	if len(args.key)!=1:
+		print('an api key is required with --key')
+		sys.exit(1)
+	else:
+		apikey=str(args.key[0])
+		print("Testing key " + apikey)
+		url = "http://api.openweathermap.org/data/2.5/weather?id="+'707860'+"&appid="+apikey
+		u = urllib.request.urlopen(url)
+		k = u.read()
+		print(len(k))
+		if len(k) > 10:
+			print("passed")
+			file = open(".global-temp.key","w")
+			file.write(apikey)
+			file.close()
+		else:
+			print("failed, please get a valid key from https://www.alphavantage.co/support/#api-key")
+		sys.exit(1)
+
+if os.path.exists(".global-temp.key")==False:
+	print("Please add a valid key")
+	sys.exit(1)
+else:
+	file = open(".global-temp.key","r")
+	apikey = file.read()
+	file.close()
+	os.chdir(owd)
+
 def gettemp(id):
 	location=str(id)
-	print(location)
+	sys.stdout.write('.')
+#	print(location)
 	url = "http://api.openweathermap.org/data/2.5/weather?id="+location+"&appid="+apikey
 	try:
 		f = urllib.request.urlopen(url)
@@ -50,7 +83,7 @@ def gettemp(id):
 
 if args.read:
 	a=(args.read[0])
-	print(a)
+#	print(a)
 	with open(a, mode='r') as f:
 		json_data = json.load(f)
 	for json_dict in json_data:
@@ -79,7 +112,7 @@ print()
 average_kelvin=(sum(temps)/len(temps))
 average_celsius=((average_kelvin)-273.15)
 average_fahrenheit=(((average_celsius)*1.8)+32)
-
+print(str(datetime.datetime.now()))
 print("Global average = " + str(round(average_kelvin,4)) + " kelvin, " + str(round(average_celsius,4)) + " celsius, " + str(round(average_fahrenheit,4)) + " fahrenheit")
 #print("Kelvin " + str(round(average_kelvin,4)))
 #print("Celsius " + str(round(average_celsius,4)))
@@ -94,9 +127,5 @@ print("Hottest place is " + str(getstation(max(temps.values()))) + " at " + str(
 print("Coldest place is " + str(getstation(min(temps.values()))) + " at " + str(round(min(temps)-273.15,4)) + " celsius")
 
 # ToDo
-# print status on single line N of Total
-# show how many fails 
-# estimate time to complete
-# show coldest place and hottest place
-# add date and time of sample
-# and key
+# create influx update function
+
