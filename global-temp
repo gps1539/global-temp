@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 import urllib.request
-import re
+#import re
 import os
 import sys
 import argparse
 import json
 import datetime
 import time
+from influxdb import InfluxDBClient
 from multiprocessing.dummy import Pool
 
 temps={}
@@ -65,19 +66,23 @@ else:
 
 def gettemp(id):
 	location=str(id)
-	sys.stdout.write('.')
-#	print(location)
 	url = "http://api.openweathermap.org/data/2.5/weather?id="+location+"&appid="+apikey
 	try:
 		f = urllib.request.urlopen(url)
 		r = f.read()
+		while len(r) < 400:
+			time.sleep(1)
+			f = urllib.request.urlopen(priceurl)
+			r = f.read()
 		r = (r.decode("utf-8").strip())
 		r = r.split('"temp"', 1)[1]
 		r = r.split(',', 1)[0]
 		r = r.split(':', 1)[1]
 		temps.update({float(r):location})
+		print(location)
 	except urllib.error.URLError as e:
 		errors=+1
+#		print(location)
 		print('http timeout ' + str(errors) + ' errors')
 		return
 
@@ -97,6 +102,48 @@ def getstation(id):
 	return(list(stations.keys())[list(stations.values()).index(id)])
 
 
+if args.influx:
+	server=str(args.influx[0])
+	port=int(args.influx[1])
+	user=str(args.influx[2])
+	password=str(args.influx[3])
+	metric = "temp"
+	database = "global_temp"
+	series = []
+
+	pool = Pool(1024)
+	pool.map(gettemp, stations.values())
+	print(temps)
+	ave=(sum(temps)/len(temps)-273.15)
+	print(ave)
+	hottest = str(getstation(max(temps.values())))
+	print(hottest)
+	high = (max(temps)-273.15)
+	print(high)
+	coldest = str(getstation(min(temps.values())))
+	print(coldest)
+	low = (min(temps)-273.15)
+	print(low)
+	pointValues = {
+		"time": datetime.datetime.today(),
+       	        "measurement": metric,
+       	        'fields':  {
+			'average_temp': ave,
+			'lowest_temp': low,
+			'highest_temp' : high,
+       	        },
+        	'tags': {
+			"Hottest place": hottest,
+			"Coldest place": coldest,
+       	        },
+       	    }
+	print(pointValues)
+	series.append(pointValues)
+	client = InfluxDBClient(server, port, user, password, database)
+	client.create_database(database)
+	client.write_points(series)
+	sys.exit(1)
+
 print(str(len(stations)) + ' stations')
 pool = Pool(1024)
 #pool.map(getstation, stations.values())
@@ -114,15 +161,10 @@ average_celsius=((average_kelvin)-273.15)
 average_fahrenheit=(((average_celsius)*1.8)+32)
 print(str(datetime.datetime.now()))
 print("Global average = " + str(round(average_kelvin,4)) + " kelvin, " + str(round(average_celsius,4)) + " celsius, " + str(round(average_fahrenheit,4)) + " fahrenheit")
-#print("Kelvin " + str(round(average_kelvin,4)))
-#print("Celsius " + str(round(average_celsius,4)))
-#print("Fahrenheit " + str(round(average_fahrenheit,4)))
 print()
-#print(stations)
-#print(temps)
-# test for print max value and it's key
+print(stations)
+print(temps)
 
-#print(str(max(temps, key=temps.get)) + " " + str(getstation(max(temps.values()))))
 print("Hottest place is " + str(getstation(max(temps.values()))) + " at " + str(round(max(temps)-273.15,4)) + " celsius")
 print("Coldest place is " + str(getstation(min(temps.values()))) + " at " + str(round(min(temps)-273.15,4)) + " celsius")
 
