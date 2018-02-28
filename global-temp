@@ -79,7 +79,32 @@ def gettemp(id):
 		r = r.split(',', 1)[0]
 		r = r.split(':', 1)[1]
 		temps.update({float(r):location})
-		print(location)
+#		print(location)
+		print((len(temps)), end='\r', flush=True)
+	except urllib.error.URLError as e:
+		errors=+1
+#		print(location)
+		print('http timeout ' + str(errors) + ' errors')
+		return
+
+def getlocal(id):
+	location=str(id)
+	url = "http://api.openweathermap.org/data/2.5/weather?id="+location+"&appid="+apikey
+	try:
+		f = urllib.request.urlopen(url)
+		r = f.read()
+		while len(r) < 400:
+			time.sleep(1)
+			f = urllib.request.urlopen(priceurl)
+			r = f.read()
+		r = (r.decode("utf-8").strip())
+		print(r)
+		r = r.split('"coord"', 1)[1]
+		print(r)
+		r = r.split(',', 1)[0]
+		r = r.split(':', 1)[1]
+		temps.update({float(r):location})
+#		print(location)
 	except urllib.error.URLError as e:
 		errors=+1
 #		print(location)
@@ -145,8 +170,8 @@ if args.influx:
 	sys.exit(1)
 
 print(str(len(stations)) + ' stations')
-pool = Pool(1024)
-#pool.map(getstation, stations.values())
+#pool = Pool(1024) # maybe too high for reliable pulls
+pool = Pool(16)
 pool.map(gettemp, stations.values())
 #print(stations.values())
 
@@ -156,18 +181,22 @@ pool.map(gettemp, stations.values())
 #	time.sleep(1)
 
 print()
+print(str(len(temps)) + ' successful reads')
+
+print()
 average_kelvin=(sum(temps)/len(temps))
 average_celsius=((average_kelvin)-273.15)
 average_fahrenheit=(((average_celsius)*1.8)+32)
 print(str(datetime.datetime.now()))
 print("Global average = " + str(round(average_kelvin,4)) + " kelvin, " + str(round(average_celsius,4)) + " celsius, " + str(round(average_fahrenheit,4)) + " fahrenheit")
 print()
-print(stations)
-print(temps)
+#print(stations)
+#print(temps)
 
 print("Hottest place is " + str(getstation(max(temps.values()))) + " at " + str(round(max(temps)-273.15,4)) + " celsius")
 print("Coldest place is " + str(getstation(min(temps.values()))) + " at " + str(round(min(temps)-273.15,4)) + " celsius")
 
-# ToDo
-# create influx update function
+# Get geo location of hottest and coldest
+#hottest=str(getstation(max(temps.values())))
+#print(stations[hottest])
 
